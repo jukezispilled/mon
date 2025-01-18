@@ -6,42 +6,65 @@ const App = () => {
   const [monitoredWallets, setMonitoredWallets] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    // Clear all intervals when component is unmounted
+    return () => {
+      monitoredWallets.forEach(wallet => {
+        if (wallet.intervalId) {
+          clearInterval(wallet.intervalId);
+        }
+      });
+    };
+  }, [monitoredWallets]);
+
   const handleMonitor = async () => {
     if (!walletAddress) {
       alert("Please enter a wallet address!");
       return;
     }
-  
+
     setLoading(true);
-  
+
     // Add the wallet address to the monitored list
-    setMonitoredWallets((prev) => [...prev, walletAddress]);
+    const newWallet = { walletAddress, transactions: [] };
+    setMonitoredWallets((prev) => [...prev, newWallet]);
     setWalletAddress(""); // Reset the input field
-  
-    try {
-      const response = await axios.post("/api/monitor", {
-        walletAddresses: [walletAddress],  // Pass walletAddress as an array
-      });
-  
-      // Handle the response and update monitored wallets
-      setMonitoredWallets((prev) => {
-        return [
-          ...prev,
-          {
-            walletAddress,
-            transactions: response.data.wallets.find(
-              (wallet) => wallet.walletAddress === walletAddress
-            ).transactions,
-          },
-        ];
-      });
-  
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
-      setLoading(false);
-    }
-  };  
+
+    // Poll for transaction updates every 10 seconds
+    const intervalId = setInterval(async () => {
+      try {
+        const response = await axios.post("https://mon-ey7n.vercel.app/api/monitor", {
+          walletAddresses: [newWallet.walletAddress],
+        });
+
+        // Find the wallet data in the response and update transactions
+        setMonitoredWallets((prev) =>
+          prev.map((wallet) => {
+            if (wallet.walletAddress === newWallet.walletAddress) {
+              return {
+                ...wallet,
+                transactions: response.data.wallets.find(
+                  (w) => w.walletAddress === wallet.walletAddress
+                ).transactions,
+              };
+            }
+            return wallet;
+          })
+        );
+      } catch (error) {
+        console.error("Error fetching transactions:", error);
+      }
+    }, 10000); // Poll every 10 seconds
+
+    // Store the intervalId in the wallet object to clear it when necessary
+    setMonitoredWallets((prev) =>
+      prev.map((wallet) =>
+        wallet.walletAddress === newWallet.walletAddress
+          ? { ...wallet, intervalId }
+          : wallet
+      )
+    );
+  };
 
   return (
     <div className="p-6">
