@@ -16,6 +16,33 @@ const App = () => {
     };
   }, [monitoredWallets]);
 
+  const fetchTransactions = async (walletAddress) => {
+    try {
+      const response = await fetch("https://mon-ey7n.vercel.app/api/monitor", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddresses: [walletAddress],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      return data.wallets.find(
+        (w) => w.walletAddress === walletAddress
+      ).transactions;
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      return [];
+    }
+  };
+
   const handleMonitor = async () => {
     if (!walletAddress) {
       alert("Please enter a wallet address!");
@@ -29,42 +56,30 @@ const App = () => {
     setMonitoredWallets((prev) => [...prev, newWallet]);
     setWalletAddress(""); // Reset the input field
 
+    // Immediately fetch transactions for the wallet
+    const initialTransactions = await fetchTransactions(newWallet.walletAddress);
+
+    // Update state with the fetched transactions
+    setMonitoredWallets((prev) =>
+      prev.map((wallet) =>
+        wallet.walletAddress === newWallet.walletAddress
+          ? { ...wallet, transactions: initialTransactions }
+          : wallet
+      )
+    );
+
     // Poll for transaction updates every 10 seconds
     const intervalId = setInterval(async () => {
-      try {
-        const response = await fetch("https://mon-ey7n.vercel.app/api/monitor", {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            walletAddresses: [newWallet.walletAddress],
-          }),
-        });
+      const transactions = await fetchTransactions(newWallet.walletAddress);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        // Find the wallet data in the response and update transactions
-        setMonitoredWallets((prev) =>
-          prev.map((wallet) => {
-            if (wallet.walletAddress === newWallet.walletAddress) {
-              return {
-                ...wallet,
-                transactions: data.wallets.find(
-                  (w) => w.walletAddress === wallet.walletAddress
-                ).transactions,
-              };
-            }
-            return wallet;
-          })
-        );
-      } catch (error) {
-        console.error("Error fetching transactions:", error);
-      }
+      // Update the wallet with the new transactions
+      setMonitoredWallets((prev) =>
+        prev.map((wallet) =>
+          wallet.walletAddress === newWallet.walletAddress
+            ? { ...wallet, transactions }
+            : wallet
+        )
+      );
     }, 10000); // Poll every 10 seconds
 
     // Store the intervalId in the wallet object to clear it when necessary
@@ -78,7 +93,7 @@ const App = () => {
   };
 
   const handleRemoveWallet = (walletToRemove) => {
-    setMonitoredWallets((prev) => 
+    setMonitoredWallets((prev) =>
       prev.filter((wallet) => {
         if (wallet.walletAddress === walletToRemove) {
           if (wallet.intervalId) {
@@ -156,5 +171,3 @@ const App = () => {
 };
 
 export default App;
-
-//nice
