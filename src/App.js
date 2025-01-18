@@ -15,7 +15,7 @@ const App = () => {
 
     try {
       setLoading(true);
-      const response = await axios.post("/api/solanaMonitor", { walletAddress });
+      const response = await axios.post("https://mon-ey7n.vercel.app/api/monitor", { walletAddress });
       setTransactions(response.data.transactions);
       setPolling(true); // Start polling
       setLoading(false);
@@ -30,7 +30,7 @@ const App = () => {
     if (polling) {
       const interval = setInterval(async () => {
         try {
-          const response = await axios.post("/api/solanaMonitor", { walletAddress });
+          const response = await axios.post("https://mon-ey7n.vercel.app/api/monitor", { walletAddress });
           setTransactions(response.data.transactions);
         } catch (error) {
           console.error("Error fetching new transactions:", error);
