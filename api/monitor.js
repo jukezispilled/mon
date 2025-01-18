@@ -1,10 +1,7 @@
-import axios from "axios";
-import dotenv from "dotenv";
-dotenv.config();
+// /api/monitor.js
+import { Connection, PublicKey } from "@solana/web3.js";
 
-// Replace with the environment variable for the Helius API key
-const HELIUS_RPC_URL = "https://solana-api.helius.xyz/v0/transactions"; // Helius RPC URL
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY; // Use the API key from the environment variables
+const HELIUS_RPC_URL = process.env.HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -19,35 +16,44 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Initialize Solana connection
+    const connection = new Connection(HELIUS_RPC_URL, "confirmed");
+
     const allTransactions = await Promise.all(
       walletAddresses.map(async (walletAddress) => {
-        // Validate wallet address format
-        if (!/^[1-9A-HJ-NP-Za-km-zA-HJ-NP-Z1-9]{32,44}$/.test(walletAddress)) {
-          throw new Error(`Invalid wallet address: ${walletAddress}`);
-        }
-
         try {
-          // Fetch recent transactions from Helius API for each wallet
-          const response = await axios.get(HELIUS_RPC_URL, {
-            params: {
-              publicKey: walletAddress,
-              apiKey: HELIUS_API_KEY,  // API key passed from environment variable
-              limit: 10,
-            },
-          });
+          const publicKey = new PublicKey(walletAddress);
+          
+          // Get recent signatures
+          const signatures = await connection.getSignaturesForAddress(
+            publicKey,
+            { limit: 10 }
+          );
 
-          const transactions = response.data.transactions.map((tx) => {
-            return {
-              signature: tx.signature,
-              blockTime: tx.blockTime,
-              transactionDetails: tx.transaction.message.instructions,
-              status: tx.meta.err ? "Failed" : "Success",
-            };
-          });
+          // Get transaction details
+          const transactions = await Promise.all(
+            signatures.map(async (sig) => {
+              try {
+                const tx = await connection.getParsedTransaction(sig.signature);
+                return {
+                  signature: sig.signature,
+                  blockTime: sig.blockTime,
+                  transactionDetails: tx?.transaction?.message?.instructions || [],
+                  status: tx?.meta?.err ? "Failed" : "Success",
+                };
+              } catch (error) {
+                console.error(`Error fetching transaction ${sig.signature}:`, error);
+                return null;
+              }
+            })
+          );
 
-          return { walletAddress, transactions };
+          return {
+            walletAddress,
+            transactions: transactions.filter(Boolean)
+          };
         } catch (error) {
-          console.error(`Error fetching transactions for ${walletAddress}:`, error);
+          console.error(`Error processing wallet ${walletAddress}:`, error);
           return { walletAddress, transactions: [] };
         }
       })
