@@ -1,7 +1,10 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import axios from "axios";
+import dotenv from "dotenv";
+dotenv.config();
 
-// Initialize the Solana connection
-const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+// Replace with the environment variable for the Helius API key
+const HELIUS_RPC_URL = "https://solana-api.helius.xyz/v0/transactions"; // Helius RPC URL
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY; // Use the API key from the environment variables
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -18,32 +21,35 @@ export default async function handler(req, res) {
   try {
     const allTransactions = await Promise.all(
       walletAddresses.map(async (walletAddress) => {
-        // Ensure walletAddress is a valid PublicKey string
-        if (!PublicKey.isOnCurve(walletAddress)) {
+        // Validate wallet address format
+        if (!/^[1-9A-HJ-NP-Za-km-zA-HJ-NP-Z1-9]{32,44}$/.test(walletAddress)) {
           throw new Error(`Invalid wallet address: ${walletAddress}`);
         }
 
-        const publicKey = new PublicKey(walletAddress);
+        try {
+          // Fetch recent transactions from Helius API for each wallet
+          const response = await axios.get(HELIUS_RPC_URL, {
+            params: {
+              publicKey: walletAddress,
+              apiKey: HELIUS_API_KEY,  // API key passed from environment variable
+              limit: 10,
+            },
+          });
 
-        // Fetch recent transaction signatures for the wallet address
-        const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 10 });
-
-        // Fetch details of each transaction
-        const transactions = await Promise.all(
-          signatures.map(async (signatureInfo) => {
-            const transaction = await connection.getParsedTransaction(signatureInfo.signature);
-            if (!transaction) return null;
-
+          const transactions = response.data.transactions.map((tx) => {
             return {
-              signature: signatureInfo.signature,
-              blockTime: transaction.blockTime,
-              transactionDetails: transaction.transaction.message.instructions,
-              status: transaction.meta.err ? "Failed" : "Success",
+              signature: tx.signature,
+              blockTime: tx.blockTime,
+              transactionDetails: tx.transaction.message.instructions,
+              status: tx.meta.err ? "Failed" : "Success",
             };
-          })
-        );
+          });
 
-        return { walletAddress, transactions: transactions.filter((tx) => tx !== null) };
+          return { walletAddress, transactions };
+        } catch (error) {
+          console.error(`Error fetching transactions for ${walletAddress}:`, error);
+          return { walletAddress, transactions: [] };
+        }
       })
     );
 
