@@ -10,14 +10,19 @@ export default async function handler(req, res) {
 
   const { walletAddresses } = req.body;
 
-  if (!walletAddresses || walletAddresses.length === 0) {
-    return res.status(400).json({ error: "At least one wallet address is required" });
+  // Validate walletAddresses
+  if (!Array.isArray(walletAddresses) || walletAddresses.length === 0) {
+    return res.status(400).json({ error: "walletAddresses must be an array with at least one address" });
   }
 
   try {
-    // Fetch recent transaction data for each wallet address
     const allTransactions = await Promise.all(
       walletAddresses.map(async (walletAddress) => {
+        // Ensure walletAddress is a valid PublicKey string
+        if (!PublicKey.isOnCurve(walletAddress)) {
+          throw new Error(`Invalid wallet address: ${walletAddress}`);
+        }
+
         const publicKey = new PublicKey(walletAddress);
 
         // Fetch recent transaction signatures for the wallet address
@@ -27,10 +32,7 @@ export default async function handler(req, res) {
         const transactions = await Promise.all(
           signatures.map(async (signatureInfo) => {
             const transaction = await connection.getParsedTransaction(signatureInfo.signature);
-
-            if (!transaction) {
-              return null;
-            }
+            if (!transaction) return null;
 
             return {
               signature: signatureInfo.signature,
@@ -45,7 +47,6 @@ export default async function handler(req, res) {
       })
     );
 
-    // Respond with the transaction data for all monitored wallets
     return res.status(200).json({ wallets: allTransactions });
   } catch (error) {
     console.error("Error fetching Solana transactions:", error);

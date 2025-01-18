@@ -11,37 +11,37 @@ const App = () => {
       alert("Please enter a wallet address!");
       return;
     }
-
+  
     setLoading(true);
-
+  
     // Add the wallet address to the monitored list
     setMonitoredWallets((prev) => [...prev, walletAddress]);
     setWalletAddress(""); // Reset the input field
-
-    // Poll for transaction updates every 10 seconds for the new wallet
-    setInterval(async () => {
-      try {
-        const response = await axios.post("https://mon-ey7n.vercel.app/api/monitor", {
-          walletAddresses: monitoredWallets,
-        });
-
-        // Update the transactions for the wallets being monitored
-        setMonitoredWallets((prev) => {
-          return prev.map((walletAddress) => {
-            const walletData = response.data.wallets.find(
+  
+    try {
+      const response = await axios.post("/api/monitor", {
+        walletAddresses: [walletAddress],  // Pass walletAddress as an array
+      });
+  
+      // Handle the response and update monitored wallets
+      setMonitoredWallets((prev) => {
+        return [
+          ...prev,
+          {
+            walletAddress,
+            transactions: response.data.wallets.find(
               (wallet) => wallet.walletAddress === walletAddress
-            );
-            return {
-              ...walletData,
-              transactions: walletData.transactions,
-            };
-          });
-        });
-      } catch (error) {
-        console.error("Error fetching transactions:", error);
-      }
-    }, 10000); // Poll every 10 seconds
-  };
+            ).transactions,
+          },
+        ];
+      });
+  
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      setLoading(false);
+    }
+  };  
 
   return (
     <div className="p-6">
