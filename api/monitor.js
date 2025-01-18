@@ -1,7 +1,7 @@
 // /api/monitor.js
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 
-const HELIUS_RPC_URL = process.env.HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
+const HELIUS_RPC_URL = process.env.HELIUS_RPC_URL || "https://api.helius.xyz/v0/addresses/{address}/transactions/?api-key=YOUR_API_KEY";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -16,41 +16,32 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Initialize Solana connection
-    const connection = new Connection(HELIUS_RPC_URL, "confirmed");
-
     const allTransactions = await Promise.all(
       walletAddresses.map(async (walletAddress) => {
         try {
-          const publicKey = new PublicKey(walletAddress);
+          // Validate the wallet address
+          new PublicKey(walletAddress); // This will throw if invalid
           
-          // Get recent signatures
-          const signatures = await connection.getSignaturesForAddress(
-            publicKey,
-            { limit: 10 }
-          );
-
-          // Get transaction details
-          const transactions = await Promise.all(
-            signatures.map(async (sig) => {
-              try {
-                const tx = await connection.getParsedTransaction(sig.signature);
-                return {
-                  signature: sig.signature,
-                  blockTime: sig.blockTime,
-                  transactionDetails: tx?.transaction?.message?.instructions || [],
-                  status: tx?.meta?.err ? "Failed" : "Success",
-                };
-              } catch (error) {
-                console.error(`Error fetching transaction ${sig.signature}:`, error);
-                return null;
-              }
-            })
-          );
-
+          // Replace {address} in the URL with the actual wallet address
+          const apiUrl = HELIUS_RPC_URL.replace("{address}", walletAddress);
+          
+          // Fetch transactions directly from Helius API
+          const response = await fetch(apiUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const transactions = await response.json();
+          
+          // Format the response to match your existing structure
           return {
             walletAddress,
-            transactions: transactions.filter(Boolean)
+            transactions: transactions.map(tx => ({
+              signature: tx.signature,
+              blockTime: tx.timestamp,
+              transactionDetails: tx.instructions || [],
+              status: tx.success ? "Success" : "Failed",
+            }))
           };
         } catch (error) {
           console.error(`Error processing wallet ${walletAddress}:`, error);
