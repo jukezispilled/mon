@@ -25,12 +25,25 @@ export default async function handler(req, res) {
     const transactions = await Promise.all(
       signatures.map(async (signatureInfo) => {
         const transaction = await connection.getParsedTransaction(signatureInfo.signature);
-        return transaction;
+
+        if (!transaction) {
+          return null;
+        }
+
+        return {
+          signature: signatureInfo.signature,
+          blockTime: transaction.blockTime,
+          transactionDetails: transaction.transaction.message.instructions,
+          status: transaction.meta.err ? "Failed" : "Success",
+        };
       })
     );
 
+    // Filter out any null transactions (in case there are any missing or invalid ones)
+    const validTransactions = transactions.filter((tx) => tx !== null);
+
     // Respond with the transaction data
-    return res.status(200).json({ transactions });
+    return res.status(200).json({ transactions: validTransactions });
   } catch (error) {
     console.error("Error fetching Solana transactions:", error);
     return res.status(500).json({ error: "Error fetching transactions" });
