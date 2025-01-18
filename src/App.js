@@ -5,9 +5,9 @@ const App = () => {
   const [monitoredWallets, setMonitoredWallets] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Cleanup the intervals when the component is unmounted
   useEffect(() => {
     return () => {
+      // Cleanup the intervals when the component is unmounted
       monitoredWallets.forEach(wallet => {
         if (wallet.intervalId) {
           clearInterval(wallet.intervalId);
@@ -34,9 +34,11 @@ const App = () => {
 
       const data = await response.json();
 
-      return data.wallets.find(
+      // Return transactions for the specific wallet
+      const wallet = data.wallets.find(
         (w) => w.walletAddress === walletAddress
-      ).transactions;
+      );
+      return wallet ? wallet.transactions : [];
     } catch (error) {
       console.error("Error fetching transactions:", error);
       return [];
@@ -51,32 +53,25 @@ const App = () => {
 
     setLoading(true);
 
-    // Add the wallet address to the monitored list
-    const newWallet = { walletAddress, transactions: [] };
+    // Fetch transactions for the wallet immediately
+    const transactions = await fetchTransactions(walletAddress);
+
+    // Add the wallet address to the monitored list with the fetched transactions
+    const newWallet = { walletAddress, transactions };
     setMonitoredWallets((prev) => [...prev, newWallet]);
+
     setWalletAddress(""); // Reset the input field
-
-    // Immediately fetch transactions for the wallet and update the state
-    const initialTransactions = await fetchTransactions(newWallet.walletAddress);
-
-    // Update the wallet with the fetched transactions
-    setMonitoredWallets((prev) =>
-      prev.map((wallet) =>
-        wallet.walletAddress === newWallet.walletAddress
-          ? { ...wallet, transactions: initialTransactions }
-          : wallet
-      )
-    );
+    setLoading(false);
 
     // Poll for transaction updates every 10 seconds
     const intervalId = setInterval(async () => {
-      const transactions = await fetchTransactions(newWallet.walletAddress);
+      const updatedTransactions = await fetchTransactions(walletAddress);
 
       // Update the wallet with the new transactions
       setMonitoredWallets((prev) =>
         prev.map((wallet) =>
-          wallet.walletAddress === newWallet.walletAddress
-            ? { ...wallet, transactions }
+          wallet.walletAddress === walletAddress
+            ? { ...wallet, transactions: updatedTransactions }
             : wallet
         )
       );
@@ -85,7 +80,7 @@ const App = () => {
     // Store the intervalId in the wallet object to clear it when necessary
     setMonitoredWallets((prev) =>
       prev.map((wallet) =>
-        wallet.walletAddress === newWallet.walletAddress
+        wallet.walletAddress === walletAddress
           ? { ...wallet, intervalId }
           : wallet
       )
