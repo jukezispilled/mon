@@ -1,7 +1,7 @@
-// /api/monitor.js
 import { Connection, PublicKey } from "@solana/web3.js";
 
-const HELIUS_RPC_URL = process.env.HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
+// Initialize the Solana connection
+const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -16,46 +16,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Initialize Solana connection
-    const connection = new Connection(HELIUS_RPC_URL, "confirmed");
-
     const allTransactions = await Promise.all(
       walletAddresses.map(async (walletAddress) => {
-        try {
-          const publicKey = new PublicKey(walletAddress);
-          
-          // Get recent signatures
-          const signatures = await connection.getSignaturesForAddress(
-            publicKey,
-            { limit: 10 }
-          );
-
-          // Get transaction details
-          const transactions = await Promise.all(
-            signatures.map(async (sig) => {
-              try {
-                const tx = await connection.getParsedTransaction(sig.signature);
-                return {
-                  signature: sig.signature,
-                  blockTime: sig.blockTime,
-                  transactionDetails: tx?.transaction?.message?.instructions || [],
-                  status: tx?.meta?.err ? "Failed" : "Success",
-                };
-              } catch (error) {
-                console.error(`Error fetching transaction ${sig.signature}:`, error);
-                return null;
-              }
-            })
-          );
-
-          return {
-            walletAddress,
-            transactions: transactions.filter(Boolean)
-          };
-        } catch (error) {
-          console.error(`Error processing wallet ${walletAddress}:`, error);
-          return { walletAddress, transactions: [] };
+        // Ensure walletAddress is a valid PublicKey string
+        if (!PublicKey.isOnCurve(walletAddress)) {
+          throw new Error(`Invalid wallet address: ${walletAddress}`);
         }
+
+        const publicKey = new PublicKey(walletAddress);
+
+        // Fetch recent transaction signatures for the wallet address
+        const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 10 });
+
+        // Fetch details of each transaction
+        const transactions = await Promise.all(
+          signatures.map(async (signatureInfo) => {
+            const transaction = await connection.getParsedTransaction(signatureInfo.signature);
+            if (!transaction) return null;
+
+            return {
+              signature: signatureInfo.signature,
+              blockTime: transaction.blockTime,
+              transactionDetails: transaction.transaction.message.instructions,
+              status: transaction.meta.err ? "Failed" : "Success",
+            };
+          })
+        );
+
+        return { walletAddress, transactions: transactions.filter((tx) => tx !== null) };
       })
     );
 
