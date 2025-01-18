@@ -21,7 +21,7 @@ const App = () => {
     // Poll for transaction updates every 10 seconds for the new wallet
     setInterval(async () => {
       try {
-        const response = await axios.post("/api/monitor", {
+        const response = await axios.post("https://mon-kohl.vercel.app//api/monitor", {
           walletAddresses: monitoredWallets,
         });
 
