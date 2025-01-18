@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY; // Make sure this is set in your .env file
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -9,7 +9,6 @@ export default async function handler(req, res) {
 
   const { walletAddresses } = req.body;
 
-  // Validate walletAddresses
   if (!Array.isArray(walletAddresses) || walletAddresses.length === 0) {
     return res.status(400).json({ error: "walletAddresses must be an array with at least one address" });
   }
@@ -18,12 +17,11 @@ export default async function handler(req, res) {
     const allTransactions = await Promise.all(
       walletAddresses.map(async (walletAddress) => {
         try {
-          // Validate the wallet address
           const publicKey = new PublicKey(walletAddress);
 
-          // Use Helius API to fetch transactions
+          // Use Helius API to fetch transactions with a higher limit to ensure we get enough successful ones
           const response = await fetch(
-            `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=10`
+            `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=20`
           );
 
           if (!response.ok) {
@@ -32,13 +30,16 @@ export default async function handler(req, res) {
 
           const data = await response.json();
 
-          // Transform the data to match your frontend's expected format
-          const transactions = data.map(tx => ({
-            signature: tx.signature,
-            blockTime: tx.timestamp ? Math.floor(tx.timestamp / 1000) : null,
-            transactionDetails: tx.instructions || [],
-            status: tx.success ? "Success" : "Failed"
-          }));
+          // Filter for successful transactions and transform the data
+          const transactions = data
+            .filter(tx => tx.success === true) // Only keep successful transactions
+            .slice(0, 10) // Take only the 10 most recent successful ones
+            .map(tx => ({
+              signature: tx.signature,
+              blockTime: tx.timestamp ? Math.floor(tx.timestamp / 1000) : null,
+              transactionDetails: tx.instructions || [],
+              status: "Success" // We know it's always Success now
+            }));
 
           return {
             walletAddress,
