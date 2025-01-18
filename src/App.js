@@ -5,8 +5,8 @@ const App = () => {
   const [monitoredWallets, setMonitoredWallets] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Cleanup the intervals when the component is unmounted
   useEffect(() => {
-    // Clear all intervals when component is unmounted
     return () => {
       monitoredWallets.forEach(wallet => {
         if (wallet.intervalId) {
@@ -56,10 +56,10 @@ const App = () => {
     setMonitoredWallets((prev) => [...prev, newWallet]);
     setWalletAddress(""); // Reset the input field
 
-    // Immediately fetch transactions for the wallet
+    // Immediately fetch transactions for the wallet and update the state
     const initialTransactions = await fetchTransactions(newWallet.walletAddress);
 
-    // Update state with the fetched transactions
+    // Update the wallet with the fetched transactions
     setMonitoredWallets((prev) =>
       prev.map((wallet) =>
         wallet.walletAddress === newWallet.walletAddress
