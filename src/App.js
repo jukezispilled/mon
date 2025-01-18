@@ -67,19 +67,11 @@ const App = () => {
     const intervalId = setInterval(async () => {
       const updatedTransactions = await fetchTransactions(walletAddress);
 
-      // Merge the old and new transactions, avoiding duplicates
+      // Update the wallet with the new transactions
       setMonitoredWallets((prev) =>
         prev.map((wallet) =>
           wallet.walletAddress === walletAddress
-            ? {
-                ...wallet,
-                transactions: [
-                  ...wallet.transactions,
-                  ...updatedTransactions.filter(
-                    (newTx) => !wallet.transactions.some((existingTx) => existingTx.signature === newTx.signature)
-                  ),
-                ],
-              }
+            ? { ...wallet, transactions: updatedTransactions }
             : wallet
         )
       );
