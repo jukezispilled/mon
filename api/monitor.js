@@ -1,7 +1,6 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 
-// Initialize the Solana connection
-const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY; // Make sure this is set in your .env file
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -18,32 +17,37 @@ export default async function handler(req, res) {
   try {
     const allTransactions = await Promise.all(
       walletAddresses.map(async (walletAddress) => {
-        // Ensure walletAddress is a valid PublicKey string
-        if (!PublicKey.isOnCurve(walletAddress)) {
-          throw new Error(`Invalid wallet address: ${walletAddress}`);
+        try {
+          // Validate the wallet address
+          const publicKey = new PublicKey(walletAddress);
+
+          // Use Helius API to fetch transactions
+          const response = await fetch(
+            `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=10`
+          );
+
+          if (!response.ok) {
+            throw new Error(`Helius API error: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          // Transform the data to match your frontend's expected format
+          const transactions = data.map(tx => ({
+            signature: tx.signature,
+            blockTime: tx.timestamp ? Math.floor(tx.timestamp / 1000) : null,
+            transactionDetails: tx.instructions || [],
+            status: tx.success ? "Success" : "Failed"
+          }));
+
+          return {
+            walletAddress,
+            transactions
+          };
+        } catch (error) {
+          console.error(`Error processing wallet ${walletAddress}:`, error);
+          return { walletAddress, transactions: [] };
         }
-
-        const publicKey = new PublicKey(walletAddress);
-
-        // Fetch recent transaction signatures for the wallet address
-        const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 10 });
-
-        // Fetch details of each transaction
-        const transactions = await Promise.all(
-          signatures.map(async (signatureInfo) => {
-            const transaction = await connection.getParsedTransaction(signatureInfo.signature);
-            if (!transaction) return null;
-
-            return {
-              signature: signatureInfo.signature,
-              blockTime: transaction.blockTime,
-              transactionDetails: transaction.transaction.message.instructions,
-              status: transaction.meta.err ? "Failed" : "Success",
-            };
-          })
-        );
-
-        return { walletAddress, transactions: transactions.filter((tx) => tx !== null) };
       })
     );
 
